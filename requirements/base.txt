@@ -1,0 +1,9 @@
+django
+djangorestframework
+psycopg2-binary
+pydantic
+celery
+django-celery-results
+redis
+django-celery-beat
+django-redis

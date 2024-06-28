@@ -1,0 +1,92 @@
+services:
+  postgresql:
+    container_name: postgresql
+    hostname: postgresql
+    image: postgres:latest
+    restart: always
+    environment:
+      POSTGRES_USER: sl
+      POSTGRES_PASSWORD: qwerty
+      POSTGRES_DB: mydb
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - ./dump.sql:/docker-entrypoint-initdb.d/dump.sql
+      - postgres_vol:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      store:
+
+  redis:
+    container_name: redis
+    image: redis:alpine
+    environment:
+      ALLOW_EMPTY_PASSWORD: "yes"
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_vol:/data
+    networks:
+      store:
+
+  store:
+    container_name: store
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    command: bash -c "python store/manage.py migrate && python store/manage.py runserver 0.0.0.0:8008"
+    restart: on-failure
+    volumes:
+      - .:/app
+    ports:
+      - "8008:8008"
+    networks:
+      - store
+    depends_on:
+      - redis
+      - postgresql
+
+  celery:
+    container_name: celery
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    command: bash -c "cd store && celery -A store worker -l info"
+    restart: on-failure
+    volumes:
+      - .:/app
+    networks:
+      - store
+    depends_on:
+      - store
+      - redis
+      - postgresql
+
+  job:
+    container_name: job
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    entrypoint: bash -c "cd store && celery -A store beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
+    restart: on-failure
+    volumes:
+      - .:/app
+    networks:
+      - store
+    depends_on:
+      - store
+      - redis
+      - postgresql
+
+networks:
+  store:
+
+volumes:
+  postgres_vol:
+  redis_vol:
